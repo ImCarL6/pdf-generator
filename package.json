@@ -25,6 +25,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "jspdf": "^2.5.1",
     "puppeteer": "^21.1.0",
+    "puppeteer-core": "^21.1.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1"
   },
