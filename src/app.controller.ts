@@ -10,7 +10,7 @@ export class AppController {
 
   @Post('generate-pdf')
   async generatePDF(@Res() res: Response): Promise<void> {
-    const pdf = await this.appService.generatePDF();
+    await this.appService.generatePDF();
 
     const pdfFilePath = path.join(__dirname, 'resume.pdf');
 
