@@ -66,7 +66,7 @@ export class AppService {
     
     const element = await page.$('#area-cv')
     
-    const pdf = await element.screenshot({path: 'test.png', omitBackground: true})
+    const pdf = await element.screenshot({omitBackground: true})
     
     const pdfFile: jsPDF = new jsPDF({format: [405, 240]});
     pdfFile.addImage(pdf, 'PNG', 0, 0, 0, 0);
