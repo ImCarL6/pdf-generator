@@ -1,36 +1,42 @@
 import { Injectable } from '@nestjs/common';
 import * as puppeteer from 'puppeteer-core';
 import jsPDF from 'jspdf';
+import * as AWS from 'aws-sdk';
+import { Readable } from 'stream';
+import { v4 as uuidv4 } from 'uuid'
 
 @Injectable()
 export class AppService {
-  async generatePDF(): Promise<jsPDF> {
-    
-    const browser = await puppeteer.connect({browserWSEndpoint: 'wss://chrome.browserless.io?token=b29363c3-a607-458f-82fd-db926358273d'})
-    
-    // const browser = await puppeteer.launch({defaultViewport: {width: 1920, height: 1080}, headless: 'new'});
-    const page = await browser.newPage();
-    
-    
-    await page.goto('https://carlos-silva-resume.vercel.app/');
-
-    
-    // await page.waitForSelector('#bd-container');
-    
-    // await page.waitForSelector('.home__img');
-    
-    // await page.waitForSelector('#bd-container');
-    
-    // await page.waitForSelector('#area-cv');
-    
-    await page.setViewport({width:970 , height: 955})
-    
-    
-    await page.evaluate(() => {
-      const elementsToRemove = document.querySelectorAll('.language-toggle-container'); // Replace with your selector
-      elementsToRemove.forEach(element => element.remove());
+  async generatePDF(): Promise<Readable> {
+    const s3 = new AWS.S3({
+      accessKeyId: process.env.AWS_KEY,
+      secretAccessKey: process.env.AWS_SECRET
     });
-    
+
+    const browserlessKey: string = process.env.BROWSERLESS_KEY;
+
+    const browser = await puppeteer.connect({
+      browserWSEndpoint: browserlessKey,
+    });
+
+    const page = await browser.newPage();
+
+    await page.goto(process.env.RESUME_SITE);
+
+    await page.waitForSelector('#bd-container');
+    await page.waitForSelector('.home__img');
+    await page.waitForSelector('#bd-container');
+    await page.waitForSelector('#area-cv');
+
+    await page.setViewport({ width: 970, height: 955 });
+
+    await page.evaluate(() => {
+      const elementsToRemove = document.querySelectorAll(
+        '.language-toggle-container',
+      );
+      elementsToRemove.forEach((element) => element.remove());
+    });
+
     await page.evaluate(() => {
       const divToRemove = document.getElementById('tsparticles');
       if (divToRemove) {
@@ -38,42 +44,45 @@ export class AppService {
       }
     });
     
-    // await page.evaluate(() => {
-    //   const elementsToRemove = document.querySelectorAll('#theme-button'); // Replace with your selector
-    //   elementsToRemove.forEach(element => element.remove());
-    // });
-    
-    // await page.evaluate(() => {
-    //   const elementsToRemove = document.querySelectorAll('#snow-button'); // Replace with your selector
-    //   elementsToRemove.forEach(element => element.remove());
-    // });
-    
     await page.evaluate(() => {
       const elementsToRemove = document.querySelectorAll('#resume__generate'); // Replace with your selector
-      elementsToRemove.forEach(element => element.remove());
+      elementsToRemove.forEach((element) => element.remove());
     });
 
-    
-    // await page.click('#home > div.home__container.section.bd-grid > div.home__data.bd-grid > img')
-    
-    // await page.evaluate(() => {
-    //   return new Promise<void>((resolve) => {
-    //     setTimeout(() => {
-    //       resolve();
-    //     }, 15000);
-    //   });
-    // });
-    
-    const element = await page.$('#area-cv')
-    
-    const pdf = await element.screenshot({omitBackground: true})
-    
-    const pdfFile: jsPDF = new jsPDF({format: [405, 240]});
+    const element = await page.$('#area-cv');
+
+    const pdf = await element.screenshot({ omitBackground: true });
+
+    const pdfFile: jsPDF = new jsPDF({ format: [405, 240] });
     pdfFile.addImage(pdf, 'PNG', 0, 0, 0, 0);
-    pdfFile.save('./dist/resume.pdf')
-    // console.log('confia')
+
+    const pdfS3 = Buffer.from(pdfFile.output('arraybuffer')) 
+
     await browser.close();
-    
-    return pdfFile;
+
+    const fileName = uuidv4()
+
+    await s3
+      .putObject({
+        Bucket: process.env.AWS_BUCKET,
+        Key: fileName,
+        Body: pdfS3,
+        ContentType: 'application/pdf'
+      })
+      .promise();
+
+    const my_file = await s3
+      .getObject({
+        Bucket: process.env.AWS_BUCKET,
+        Key: fileName,
+      })
+      .createReadStream();
+
+    await s3.deleteObject({
+      Bucket: process.env.AWS_BUCKET,
+      Key: fileName,
+    })
+
+    return my_file;
   }
 }
