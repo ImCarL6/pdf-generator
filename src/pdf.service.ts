@@ -16,7 +16,7 @@ export class PdfService {
         accessKeyId: process.env.AWS_KEY,
         secretAccessKey: process.env.AWS_SECRET,
       },
-      region: process.env.AWS_REGION
+      region: process.env.AWS_REGION_RESUME
     });
     
     const browserlessKey: string = process.env.BROWSERLESS_KEY;
