@@ -2,12 +2,11 @@ import { Injectable } from '@nestjs/common';
 import * as puppeteer from 'puppeteer-core';
 import jsPDF from 'jspdf';
 import * as AWS from 'aws-sdk';
-import { Readable } from 'stream';
 import { v4 as uuidv4 } from 'uuid'
 
 @Injectable()
 export class AppService {
-  async generatePDF(): Promise<Readable> {
+  async generatePDF(): Promise<string> {
     const s3 = new AWS.S3({
       accessKeyId: process.env.AWS_KEY,
       secretAccessKey: process.env.AWS_SECRET
@@ -60,7 +59,7 @@ export class AppService {
 
     await browser.close();
 
-    const fileName = uuidv4()
+    const fileName: string = uuidv4()
 
     await s3
       .putObject({
@@ -71,18 +70,11 @@ export class AppService {
       })
       .promise();
 
-    const my_file = await s3
-      .getObject({
-        Bucket: process.env.AWS_BUCKET,
-        Key: fileName,
-      })
-      .createReadStream();
+    // await s3.deleteObject({
+    //   Bucket: process.env.AWS_BUCKET,
+    //   Key: fileName,
+    // })
 
-    await s3.deleteObject({
-      Bucket: process.env.AWS_BUCKET,
-      Key: fileName,
-    })
-
-    return my_file;
+    return fileName;
   }
 }
