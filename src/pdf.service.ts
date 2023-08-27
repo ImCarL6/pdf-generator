@@ -1,23 +1,32 @@
 import { Injectable } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import * as puppeteer from 'puppeteer-core';
 import jsPDF from 'jspdf';
-import * as AWS from 'aws-sdk';
+import { S3 } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
-export class AppService {
+export class PdfService {
+  private readonly logger = new Logger(PdfService.name);
+
   async generatePDF(): Promise<string> {
-    const s3 = new AWS.S3({
-      accessKeyId: process.env.AWS_KEY,
-      secretAccessKey: process.env.AWS_SECRET,
+    
+    const s3 = new S3({
+      credentials: {
+        accessKeyId: process.env.AWS_KEY,
+        secretAccessKey: process.env.AWS_SECRET,
+      },
+      region: process.env.AWS_REGION
     });
-
+    
     const browserlessKey: string = process.env.BROWSERLESS_KEY;
-
+    
     const browser = await puppeteer.connect({
       browserWSEndpoint: browserlessKey,
     });
-
+    
+    this.logger.verbose('Puppeteer Connected.')
+    
     const page = await browser.newPage();
 
     await page.goto(process.env.RESUME_SITE);
@@ -61,14 +70,18 @@ export class AppService {
 
     const fileName: string = uuidv4();
 
-    await s3
-      .putObject({
-        Bucket: process.env.AWS_BUCKET,
-        Key: fileName,
-        Body: pdfS3,
-        ContentType: 'application/pdf',
-      })
-      .promise();
+    this.logger.verbose('Inserting PDF into database.')
+
+    await s3.putObject({
+      Bucket: process.env.AWS_BUCKET,
+      Key: fileName,
+      Body: pdfS3,
+      ContentType: 'application/pdf',
+    }).catch(err =>{
+      this.logger.error(err)
+    });
+
+    this.logger.verbose('Success.')
 
     // await s3.deleteObject({
     //   Bucket: process.env.AWS_BUCKET,
