@@ -1,17 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
-import * as puppeteer from 'puppeteer-core';
+import {Browser, connect, Page, ElementHandle} from 'puppeteer-core';
 import jsPDF from 'jspdf';
 import { S3, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
+import { createUrl } from './util/utils';
 
 @Injectable()
 export class PdfService {
   private readonly logger = new Logger(PdfService.name);
 
-  async generatePDF(): Promise<string> {
-    
+  async generatePDF(language?: string): Promise<string|void> {
+
+    const resumeUrl: string = createUrl(process.env.RESUME_SITE, language)
+
     const s3 = new S3({
       credentials: {
         accessKeyId: process.env.AWS_KEY,
@@ -22,15 +25,15 @@ export class PdfService {
     
     const browserlessKey: string = process.env.BROWSERLESS_KEY;
     
-    const browser: puppeteer.Browser = await puppeteer.connect({
+    const browser: Browser = await connect({
       browserWSEndpoint: browserlessKey,
     });
     
     this.logger.verbose('Puppeteer Connected.')
     
-    const page: puppeteer.Page = await browser.newPage();
+    const page: Page = await browser.newPage();
 
-    await page.goto(process.env.RESUME_SITE);
+    await page.goto(resumeUrl);
 
     await page.waitForSelector('#bd-container');
     await page.waitForSelector('.home__img');
@@ -58,14 +61,14 @@ export class PdfService {
       elementsToRemove.forEach((element) => element.remove());
     });
 
-    const element: puppeteer.ElementHandle<Element> = await page.$('#area-cv');
+    const element: ElementHandle<Element> = await page.$('#area-cv');
 
     const pdf: string | Buffer = await element.screenshot({ omitBackground: true });
 
-    const pdfFile: jsPDF = new jsPDF({ format: [405, 240] });
+    const pdfFile: jsPDF = language === 'br' ? new jsPDF({ format: [410, 240] }) : new jsPDF({ format: [405, 240] });
     pdfFile.addImage(pdf, 'PNG', 0, 0, 0, 0);
 
-    const pdfS3 = Buffer.from(pdfFile.output('arraybuffer'));
+    const pdfS3: Buffer = Buffer.from(pdfFile.output('arraybuffer'));
 
     await browser.close();
 
@@ -84,18 +87,38 @@ export class PdfService {
 
     this.logger.verbose('Success.')
 
-    const expires = 3600;
-
     const command = new GetObjectCommand({Bucket: process.env.AWS_BUCKET, Key: fileName})
-    const url: string = await getSignedUrl(s3, command, {expiresIn: expires})
+    const url: string | void = await getSignedUrl(s3, command, {expiresIn: 3600}).catch(err => {
+      this.logger.error(err)
+      throw new HttpException('Error', 500)
+
+    })
+    
+    this.logger.verbose(`URL generated`)
+
+    return url;
+  }
+
+  async defaultPDF(): Promise<string|void> {
+    
+    const s3 = new S3({
+      credentials: {
+        accessKeyId: process.env.AWS_KEY,
+        secretAccessKey: process.env.AWS_SECRET,
+      },
+      region: process.env.AWS_REGION_RESUME
+    });
+
+    const expires = 3600
+
+    const command = new GetObjectCommand({Bucket: process.env.AWS_BUCKET, Key: 'Curriculum.pdf'})
+    const url: string | void = await getSignedUrl(s3, command, {expiresIn: expires}).catch(err => {
+      console.log(url)
+      this.logger.error(err)
+      throw new HttpException('Error', 500)
+    })
 
     this.logger.verbose(`URL generated. expiring in ${expires}.`)
-
-
-    // await s3.deleteObject({
-    //   Bucket: process.env.AWS_BUCKET,
-    //   Key: fileName,
-    // })
 
     return url;
   }
