@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import * as puppeteer from 'puppeteer-core';
 import jsPDF from 'jspdf';
-import { S3 } from '@aws-sdk/client-s3';
+import { S3, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -21,13 +22,13 @@ export class PdfService {
     
     const browserlessKey: string = process.env.BROWSERLESS_KEY;
     
-    const browser = await puppeteer.connect({
+    const browser: puppeteer.Browser = await puppeteer.connect({
       browserWSEndpoint: browserlessKey,
     });
     
     this.logger.verbose('Puppeteer Connected.')
     
-    const page = await browser.newPage();
+    const page: puppeteer.Page = await browser.newPage();
 
     await page.goto(process.env.RESUME_SITE);
 
@@ -57,9 +58,9 @@ export class PdfService {
       elementsToRemove.forEach((element) => element.remove());
     });
 
-    const element = await page.$('#area-cv');
+    const element: puppeteer.ElementHandle<Element> = await page.$('#area-cv');
 
-    const pdf = await element.screenshot({ omitBackground: true });
+    const pdf: string | Buffer = await element.screenshot({ omitBackground: true });
 
     const pdfFile: jsPDF = new jsPDF({ format: [405, 240] });
     pdfFile.addImage(pdf, 'PNG', 0, 0, 0, 0);
@@ -83,11 +84,19 @@ export class PdfService {
 
     this.logger.verbose('Success.')
 
+    const expires = 3600;
+
+    const command = new GetObjectCommand({Bucket: process.env.AWS_BUCKET, Key: fileName})
+    const url: string = await getSignedUrl(s3, command, {expiresIn: expires})
+
+    this.logger.verbose(`URL generated. expiring in ${expires}.`)
+
+
     // await s3.deleteObject({
     //   Bucket: process.env.AWS_BUCKET,
     //   Key: fileName,
     // })
 
-    return fileName;
+    return url;
   }
 }
