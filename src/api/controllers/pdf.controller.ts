@@ -1,7 +1,7 @@
 import { Controller, Get, Logger, Query, Req, Res } from '@nestjs/common';
 import { Response } from 'express';
-import { PdfService } from './pdf.service';
-import { pdfDto } from './pdf.dto';
+import { PdfService } from '../service/pdf.service';
+import { pdfDto } from '../domain/dtos/pdf.dto';
 
 @Controller()
 export class PdfController {
